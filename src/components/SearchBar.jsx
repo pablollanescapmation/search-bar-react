@@ -22,12 +22,27 @@ function highlightMatch(text, query) {
   })
 }
 
+function normalizeSearchResponse(response, fallbackQuery) {
+  const query = typeof response?.query === 'string' ? response.query : fallbackQuery
+
+  if (Array.isArray(response?.results)) {
+    return { query, results: response.results }
+  }
+
+  if (Array.isArray(response?.data)) {
+    return { query, results: response.data }
+  }
+
+  return { query, results: [] }
+}
+
 function SearchBar({
   buttonLabel = 'Search',
   debounceMs = 300,
   emptyMessage = 'No results found.',
   label = 'Search',
   minQueryLength = 1,
+  onSearchSubmit,
   onSelect,
   placeholder = 'Search',
   searchFn,
@@ -44,7 +59,7 @@ function SearchBar({
   const listId = `${inputId}-results`
   const normalizedQuery = query.trim()
   const shouldSearch = normalizedQuery.length >= minQueryLength
-  const showResultsPanel = isFocused && (shouldSearch || isLoading || hasSearched)
+  const showAriaResults = isFocused && (shouldSearch || isLoading || hasSearched)
 
   const performSearch = useCallback(async (searchQuery) => {
     const currentRequestId = requestIdRef.current + 1
@@ -58,12 +73,19 @@ function SearchBar({
         return null
       }
 
-      const normalizedResults = Array.isArray(response?.data) ? response.data : []
+      const normalizedResponse = normalizeSearchResponse(response, searchQuery)
+      const normalizedResults = normalizedResponse.results.filter(
+        (result) => typeof result === 'string',
+      )
 
       setResults(normalizedResults)
       setHasSearched(true)
       setActiveIndex(-1)
-      return normalizedResults
+
+      return {
+        query: normalizedResponse.query,
+        results: normalizedResults,
+      }
     } catch {
       if (requestIdRef.current !== currentRequestId) {
         return null
@@ -71,7 +93,8 @@ function SearchBar({
 
       setResults([])
       setHasSearched(true)
-      return []
+      setActiveIndex(-1)
+      return null
     } finally {
       if (requestIdRef.current === currentRequestId) {
         setIsLoading(false)
@@ -112,25 +135,22 @@ function SearchBar({
     }
   }, [])
 
-  async function executeSearch() {
-    if (!shouldSearch) {
+  async function executeSearch(rawSearchQuery = normalizedQuery) {
+    const submitQuery = rawSearchQuery.trim()
+
+    if (submitQuery.length < minQueryLength) {
       return
     }
 
-    const returnedResults = await performSearch(normalizedQuery)
+    const returnedResponse = await performSearch(submitQuery)
 
-    if (!Array.isArray(returnedResults)) {
+    if (!returnedResponse) {
       return
     }
 
-    const hasExactMatch = returnedResults.some(
-      (result) => result.toLowerCase() === normalizedQuery.toLowerCase(),
-    )
-
-    if (!hasExactMatch) {
-      onSelect?.(normalizedQuery)
-      setIsFocused(false)
-    }
+    onSearchSubmit?.(returnedResponse)
+    setQuery('')
+    setIsFocused(false)
   }
 
   function handleKeyDown(event) {
@@ -173,11 +193,11 @@ function SearchBar({
     }
   }
 
-  function handleResultSelect(result) {
-    setQuery(result)
+  async function handleResultSelect(result) {
     setActiveIndex(-1)
     setIsFocused(false)
     onSelect?.(result)
+    await executeSearch(result)
   }
 
   return (
@@ -199,7 +219,7 @@ function SearchBar({
             onKeyDown={handleKeyDown}
             aria-autocomplete="list"
             aria-controls={listId}
-            aria-expanded={showResultsPanel}
+            aria-expanded={showAriaResults}
             aria-activedescendant={
               activeIndex >= 0 ? `${inputId}-option-${activeIndex}` : undefined
             }
@@ -209,14 +229,14 @@ function SearchBar({
         <button
           type="button"
           className="searchbar-button"
-          onClick={executeSearch}
+          onClick={() => executeSearch()}
           disabled={!shouldSearch || isLoading}
         >
           {isLoading ? 'Searching...' : buttonLabel}
         </button>
       </div>
 
-      {showResultsPanel ? (
+      {showAriaResults ? (
         <div className="searchbar-panel">
           {isLoading ? (
             <p className="searchbar-state">Loading results...</p>

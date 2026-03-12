@@ -4,7 +4,7 @@ import { searchContent } from './services/searchApi'
 import './App.css'
 
 function App() {
-  const [selectedResult, setSelectedResult] = useState('')
+  const [submittedSearch, setSubmittedSearch] = useState(null)
 
   return (
     <main className="app-shell">
@@ -15,9 +15,9 @@ function App() {
         <span className="eyebrow">Reusable async search</span>
         <h1>Find backend content with a focused, modern search bar.</h1>
         <p className="hero-copy">
-          Type a query, wait for the debounced request, then move through the
-          results with the keyboard. Use the arrow keys to navigate, Enter to
-          select, and Escape to close the panel.
+          Type a query to update autocomplete suggestions for assistive tech.
+          Press Enter, click Search, or choose an option to display the server
+          response in the results panel below.
         </p>
 
         <SearchBar
@@ -27,17 +27,17 @@ function App() {
           debounceMs={350}
           searchFn={searchContent}
           emptyMessage="No matching content was returned by the server."
-          onSelect={setSelectedResult}
+          onSearchSubmit={setSubmittedSearch}
         />
 
         <div className="helper-grid" aria-label="Search instructions">
           <article>
-            <h2>Debounced</h2>
-            <p>Requests wait briefly while the user is still typing.</p>
+            <h2>Live backend calls</h2>
+            <p>Typing updates the aria suggestion list as requests return.</p>
           </article>
           <article>
-            <h2>Keyboard ready</h2>
-            <p>Arrow keys, Enter, and Escape all work from the input.</p>
+            <h2>Explicit commit</h2>
+            <p>Visible results update only on click, Enter, or list selection.</p>
           </article>
           <article>
             <h2>Reusable</h2>
@@ -47,19 +47,24 @@ function App() {
       </section>
 
       <section className="selection-panel" aria-live="polite">
-        <span className="selection-label">Selected result</span>
-        {selectedResult ? (
+        <span className="selection-label">Search results</span>
+        {submittedSearch ? (
           <>
-            <h2>{selectedResult}</h2>
-            <p>
-              This section updates after a user clicks a result or confirms one
-              from the keyboard.
-            </p>
+            <h2>Results for "{submittedSearch.query}"</h2>
+            {submittedSearch.results.length ? (
+              <ul className="selection-results-list">
+                {submittedSearch.results.map((result, index) => (
+                  <li key={`${result}-${index}`}>{result}</li>
+                ))}
+              </ul>
+            ) : (
+              <p>No results were returned for this query.</p>
+            )}
           </>
         ) : (
           <>
-            <h2>No result selected yet</h2>
-            <p>Choose any search result above to display it here.</p>
+            <h2>No results submitted yet</h2>
+            <p>Submit a search to render the backend response here.</p>
           </>
         )}
       </section>

@@ -1,30 +1,54 @@
-const mockResults = [
-  'grocery store list',
-  'weekly meal planner',
-  'this is a test',
-  'a new item here',
-  'project kickoff notes',
-  'weekend travel ideas',
-  'coffee shop checklist',
-  'home office upgrades',
-  'book club discussion topics',
-  'birthday party supplies',
-]
+const SEARCH_API_URL = import.meta.env.VITE_SEARCH_API_URL
 
-export async function searchContent(query = '') {
-  await new Promise((resolve) => {
-    window.setTimeout(resolve, 700)
-  })
+async function getResponsePayload(response) {
+  const payload = await response.json().catch(() => null)
 
-  const normalizedQuery = query.trim().toLowerCase()
+  if (!response.ok) {
+    const message =
+      typeof payload?.message === 'string'
+        ? payload.message
+        : `Search request failed with status ${response.status}`
 
-  if (!normalizedQuery) {
-    return { data: mockResults }
+    throw new Error(message)
   }
 
-  const filteredResults = mockResults.filter((item) =>
-    item.toLowerCase().includes(normalizedQuery),
-  )
+  return payload
+}
 
-  return { data: filteredResults }
+function normalizeResponse(payload, fallbackQuery) {
+  const normalizedQuery =
+    typeof payload?.query === 'string' ? payload.query : fallbackQuery
+
+  if (Array.isArray(payload?.results)) {
+    return {
+      query: normalizedQuery,
+      results: payload.results.filter((item) => typeof item === 'string'),
+    }
+  }
+
+  if (Array.isArray(payload?.data)) {
+    return {
+      query: normalizedQuery,
+      results: payload.data.filter((item) => typeof item === 'string'),
+    }
+  }
+
+  return {
+    query: normalizedQuery,
+    results: [],
+  }
+}
+
+export async function searchContent(query = '') {
+  const normalizedQuery = query.trim()
+  const response = await fetch(SEARCH_API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ query: normalizedQuery }),
+  })
+
+  const payload = await getResponsePayload(response)
+  return normalizeResponse(payload, normalizedQuery)
 }
