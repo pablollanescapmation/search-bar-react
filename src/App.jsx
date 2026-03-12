@@ -13,7 +13,7 @@ function App() {
 
       <section className="hero-panel">
         <span className="eyebrow">Reusable async search</span>
-        <h1>Find backend content with a focused, modern search bar.</h1>
+        <h1>WAHOO SEARCH</h1>
         <p className="hero-copy">
           Type a query to update autocomplete suggestions for assistive tech.
           Press Enter, click Search, or choose an option to display the server
