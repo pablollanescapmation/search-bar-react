@@ -1,11 +1,43 @@
-import { useCallback, useEffect, useId, useRef, useState } from 'react'
-import './SearchBar.css'
+import { type ReactNode, useCallback, useEffect, useId, useRef, useState } from 'react'
+import {
+  SearchBarButton,
+  SearchBarContainer,
+  SearchBarInput,
+  SearchBarInputWrap,
+  SearchBarLabel,
+  SearchBarPanel,
+  SearchBarResult,
+  SearchBarResults,
+  SearchBarRow,
+  SearchBarState,
+} from '../design-system/SearchBar.styles'
+import type { NormalizedSearchResponse } from '../services/searchApi'
 
-function escapeRegExp(value) {
+type SearchFnResponse =
+  | NormalizedSearchResponse
+  | {
+      query?: unknown
+      results?: unknown
+      data?: unknown
+    }
+
+interface SearchBarProps {
+  buttonLabel?: string
+  debounceMs?: number
+  emptyMessage?: string
+  label?: string
+  minQueryLength?: number
+  onSearchSubmit?: (response: NormalizedSearchResponse) => void
+  onSelect?: (result: string) => void
+  placeholder?: string
+  searchFn: (query: string) => Promise<SearchFnResponse>
+}
+
+function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
-function highlightMatch(text, query) {
+function highlightMatch(text: string, query: string): ReactNode {
   const normalizedQuery = query.trim()
 
   if (!normalizedQuery) {
@@ -17,20 +49,28 @@ function highlightMatch(text, query) {
 
   return parts.map((part, index) => {
     const isMatch = part.toLowerCase() === normalizedQuery.toLowerCase()
-
     return isMatch ? <mark key={`${part}-${index}`}>{part}</mark> : part
   })
 }
 
-function normalizeSearchResponse(response, fallbackQuery) {
+function normalizeSearchResponse(
+  response: SearchFnResponse,
+  fallbackQuery: string,
+): NormalizedSearchResponse {
   const query = typeof response?.query === 'string' ? response.query : fallbackQuery
 
   if (Array.isArray(response?.results)) {
-    return { query, results: response.results }
+    return {
+      query,
+      results: response.results.filter((result): result is string => typeof result === 'string'),
+    }
   }
 
   if (Array.isArray(response?.data)) {
-    return { query, results: response.data }
+    return {
+      query,
+      results: response.data.filter((result): result is string => typeof result === 'string'),
+    }
   }
 
   return { query, results: [] }
@@ -46,61 +86,58 @@ function SearchBar({
   onSelect,
   placeholder = 'Search',
   searchFn,
-}) {
-  const [query, setQuery] = useState('')
-  const [results, setResults] = useState([])
-  const [activeIndex, setActiveIndex] = useState(-1)
-  const [isFocused, setIsFocused] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-  const [hasSearched, setHasSearched] = useState(false)
-  const requestIdRef = useRef(0)
-  const containerRef = useRef(null)
+}: SearchBarProps) {
+  const [query, setQuery] = useState<string>('')
+  const [results, setResults] = useState<string[]>([])
+  const [activeIndex, setActiveIndex] = useState<number>(-1)
+  const [isFocused, setIsFocused] = useState<boolean>(false)
+  const [isLoading, setIsLoading] = useState<boolean>(false)
+  const [hasSearched, setHasSearched] = useState<boolean>(false)
+  const requestIdRef = useRef<number>(0)
+  const containerRef = useRef<HTMLDivElement | null>(null)
   const inputId = useId()
   const listId = `${inputId}-results`
   const normalizedQuery = query.trim()
   const shouldSearch = normalizedQuery.length >= minQueryLength
   const showAriaResults = isFocused && (shouldSearch || isLoading || hasSearched)
 
-  const performSearch = useCallback(async (searchQuery) => {
-    const currentRequestId = requestIdRef.current + 1
-    requestIdRef.current = currentRequestId
-    setIsLoading(true)
+  const performSearch = useCallback(
+    async (searchQuery: string): Promise<NormalizedSearchResponse | null> => {
+      const currentRequestId = requestIdRef.current + 1
+      requestIdRef.current = currentRequestId
+      setIsLoading(true)
 
-    try {
-      const response = await searchFn(searchQuery)
+      try {
+        const response = await searchFn(searchQuery)
 
-      if (requestIdRef.current !== currentRequestId) {
+        if (requestIdRef.current !== currentRequestId) {
+          return null
+        }
+
+        const normalizedResponse = normalizeSearchResponse(response, searchQuery)
+
+        setResults(normalizedResponse.results)
+        setHasSearched(true)
+        setActiveIndex(-1)
+
+        return normalizedResponse
+      } catch {
+        if (requestIdRef.current !== currentRequestId) {
+          return null
+        }
+
+        setResults([])
+        setHasSearched(true)
+        setActiveIndex(-1)
         return null
+      } finally {
+        if (requestIdRef.current === currentRequestId) {
+          setIsLoading(false)
+        }
       }
-
-      const normalizedResponse = normalizeSearchResponse(response, searchQuery)
-      const normalizedResults = normalizedResponse.results.filter(
-        (result) => typeof result === 'string',
-      )
-
-      setResults(normalizedResults)
-      setHasSearched(true)
-      setActiveIndex(-1)
-
-      return {
-        query: normalizedResponse.query,
-        results: normalizedResults,
-      }
-    } catch {
-      if (requestIdRef.current !== currentRequestId) {
-        return null
-      }
-
-      setResults([])
-      setHasSearched(true)
-      setActiveIndex(-1)
-      return null
-    } finally {
-      if (requestIdRef.current === currentRequestId) {
-        setIsLoading(false)
-      }
-    }
-  }, [searchFn])
+    },
+    [searchFn],
+  )
 
   useEffect(() => {
     if (!shouldSearch) {
@@ -121,8 +158,8 @@ function SearchBar({
   }, [debounceMs, normalizedQuery, performSearch, shouldSearch])
 
   useEffect(() => {
-    function handlePointerDown(event) {
-      if (!containerRef.current?.contains(event.target)) {
+    function handlePointerDown(event: PointerEvent) {
+      if (event.target instanceof Node && !containerRef.current?.contains(event.target)) {
         setIsFocused(false)
         setActiveIndex(-1)
       }
@@ -135,7 +172,7 @@ function SearchBar({
     }
   }, [])
 
-  async function executeSearch(rawSearchQuery = normalizedQuery) {
+  async function executeSearch(rawSearchQuery: string = normalizedQuery): Promise<void> {
     const submitQuery = rawSearchQuery.trim()
 
     if (submitQuery.length < minQueryLength) {
@@ -153,7 +190,7 @@ function SearchBar({
     setIsFocused(false)
   }
 
-  function handleKeyDown(event) {
+  function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>): void {
     if (event.key === 'ArrowDown') {
       event.preventDefault()
       setIsFocused(true)
@@ -180,11 +217,11 @@ function SearchBar({
     if (event.key === 'Enter') {
       if (activeIndex >= 0 && results[activeIndex]) {
         event.preventDefault()
-        handleResultSelect(results[activeIndex])
+        void handleResultSelect(results[activeIndex])
         return
       }
 
-      executeSearch()
+      void executeSearch()
     }
 
     if (event.key === 'Escape') {
@@ -193,7 +230,7 @@ function SearchBar({
     }
   }
 
-  async function handleResultSelect(result) {
+  async function handleResultSelect(result: string): Promise<void> {
     setActiveIndex(-1)
     setIsFocused(false)
     onSelect?.(result)
@@ -201,19 +238,16 @@ function SearchBar({
   }
 
   return (
-    <div className="searchbar" ref={containerRef}>
-      <label className="searchbar-label" htmlFor={inputId}>
-        {label}
-      </label>
+    <SearchBarContainer ref={containerRef}>
+      <SearchBarLabel htmlFor={inputId}>{label}</SearchBarLabel>
 
-      <div className="searchbar-row">
-        <div className="searchbar-input-wrap">
-          <input
+      <SearchBarRow>
+        <SearchBarInputWrap>
+          <SearchBarInput
             id={inputId}
             type="search"
             value={query}
             placeholder={placeholder}
-            className="searchbar-input"
             onChange={(event) => setQuery(event.target.value)}
             onFocus={() => setIsFocused(true)}
             onKeyDown={handleKeyDown}
@@ -224,50 +258,49 @@ function SearchBar({
               activeIndex >= 0 ? `${inputId}-option-${activeIndex}` : undefined
             }
           />
-        </div>
+        </SearchBarInputWrap>
 
-        <button
+        <SearchBarButton
           type="button"
-          className="searchbar-button"
-          onClick={() => executeSearch()}
+          onClick={() => void executeSearch()}
           disabled={!shouldSearch || isLoading}
         >
           {isLoading ? 'Searching...' : buttonLabel}
-        </button>
-      </div>
+        </SearchBarButton>
+      </SearchBarRow>
 
       {showAriaResults ? (
-        <div className="searchbar-panel">
+        <SearchBarPanel>
           {isLoading ? (
-            <p className="searchbar-state">Loading results...</p>
+            <SearchBarState>Loading results...</SearchBarState>
           ) : results.length ? (
-            <ul id={listId} className="searchbar-results" role="listbox">
+            <SearchBarResults id={listId} role="listbox">
               {results.map((result, index) => {
                 const isActive = index === activeIndex
 
                 return (
                   <li key={`${result}-${index}`} role="presentation">
-                    <button
+                    <SearchBarResult
                       id={`${inputId}-option-${index}`}
                       type="button"
                       role="option"
                       aria-selected={isActive}
-                      className={`searchbar-result ${isActive ? 'is-active' : ''}`}
+                      $isActive={isActive}
                       onMouseEnter={() => setActiveIndex(index)}
-                      onClick={() => handleResultSelect(result)}
+                      onClick={() => void handleResultSelect(result)}
                     >
                       <span>{highlightMatch(result, normalizedQuery)}</span>
-                    </button>
+                    </SearchBarResult>
                   </li>
                 )
               })}
-            </ul>
+            </SearchBarResults>
           ) : hasSearched ? (
-            <p className="searchbar-state">{emptyMessage}</p>
+            <SearchBarState>{emptyMessage}</SearchBarState>
           ) : null}
-        </div>
+        </SearchBarPanel>
       ) : null}
-    </div>
+    </SearchBarContainer>
   )
 }
 
