@@ -9,7 +9,6 @@ interface SearchPayload {
   message?: unknown
   query?: unknown
   results?: unknown
-  data?: unknown
 }
 
 async function getResponsePayload(response: Response): Promise<SearchPayload> {
@@ -37,13 +36,6 @@ function normalizeResponse(
     return {
       query: normalizedQuery,
       results: payload.results.filter((item): item is string => typeof item === 'string'),
-    }
-  }
-
-  if (Array.isArray(payload.data)) {
-    return {
-      query: normalizedQuery,
-      results: payload.data.filter((item): item is string => typeof item === 'string'),
     }
   }
 

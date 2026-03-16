@@ -1,0 +1,71 @@
+import { Meta } from '@storybook/addon-docs/blocks'
+
+<Meta title="Guides/SearchBar Integration" />
+
+# SearchBar Integration Guide
+
+Use this page to integrate the reusable SearchBar component into an application shell and align your backend response shape.
+
+## 1. Import and Render
+
+```tsx
+import SearchBar from './components/SearchBar'
+import { searchContent } from './services/searchApi'
+
+<SearchBar
+  label="Search knowledge base"
+  placeholder="Search articles"
+  buttonLabel="Search"
+  minQueryLength={2}
+  debounceMs={300}
+  emptyMessage="No matching content found."
+  searchFn={searchContent}
+  onSearchSubmit={(response) => {
+    // response: { query: string; results: string[] }
+    console.log(response)
+  }}
+/>
+```
+
+## 2. Backend Request and Response Contract
+
+The demo service sends:
+
+```json
+{
+  "query": "roadmap"
+}
+```
+
+Your backend should return this payload shape:
+
+```json
+{
+  "query": "roadmap",
+  "results": ["Roadmap Q3 priorities", "Roadmap Q4 planning"]
+}
+```
+
+Normalization rules used by the component:
+
+- query falls back to the submitted search text when missing.
+- results must come from the results key.
+- non-string entries are discarded.
+- unsupported shapes become an empty results array.
+
+## 3. Error Handling Nuance
+
+If your search function throws, the component:
+
+- keeps the UI responsive.
+- displays the empty state message.
+- avoids rendering stale results from previous requests.
+
+To surface server messages to users, catch errors in your search function and transform them into app-level notifications while still returning a valid payload shape.
+
+## 4. Backend Throughput Recommendations
+
+- Keep minQueryLength at 2 or higher for large indexes.
+- Use debounceMs in the 250-500 ms range to reduce request volume.
+- Return at most 10-20 strings for best keyboard navigation UX.
+- Prefer pre-sorted relevance so users can commit quickly with Enter.

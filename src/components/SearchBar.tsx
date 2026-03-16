@@ -18,7 +18,6 @@ type SearchFnResponse =
   | {
       query?: unknown
       results?: unknown
-      data?: unknown
     }
 
 interface SearchBarProps {
@@ -59,17 +58,10 @@ function normalizeSearchResponse(
 ): NormalizedSearchResponse {
   const query = typeof response?.query === 'string' ? response.query : fallbackQuery
 
-  if (Array.isArray(response?.results)) {
+  if ('results' in response && Array.isArray(response.results)) {
     return {
       query,
       results: response.results.filter((result): result is string => typeof result === 'string'),
-    }
-  }
-
-  if (Array.isArray(response?.data)) {
-    return {
-      query,
-      results: response.data.filter((result): result is string => typeof result === 'string'),
     }
   }
 
